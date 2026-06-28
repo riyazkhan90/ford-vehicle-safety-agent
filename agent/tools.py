@@ -136,25 +136,7 @@ def _search_vehicle_complaints(query: str, model: str = None, year: int = None) 
     collection = _get_collection()
 
     if collection is None:
-        if model and year:
-            return (
-                "The vector store is unavailable, so I am using live NHTSA complaint statistics instead.\n\n"
-                + _get_complaint_stats(model=model, year=year)
-            )
-        if model:
-            return (
-                "The vector store is unavailable right now. "
-                "I can still provide live NHTSA complaint statistics if you include a model and year, e.g. '2023 Explorer'."
-            )
-        if year:
-            return (
-                "The vector store is unavailable right now. "
-                "I can still provide live NHTSA complaint statistics if you include a Ford model, e.g. 'Explorer'."
-            )
-        return (
-            "The vector store is unavailable right now. "
-            "Please provide a specific Ford model and year so I can return live NHTSA complaint or recall information."
-        )
+        return "The knowledge base is unavailable. Live NHTSA complaint statistics are still available via the complaint stats tool."
 
     where: Optional[dict] = None
     if model and year:
@@ -189,19 +171,15 @@ def _search_vehicle_complaints(query: str, model: str = None, year: int = None) 
     metas = results["metadatas"][0]
 
     if not docs:
-        notice = (
-            "Information is not available in the local knowledge base at the moment. "
-            "No matching complaints were found in the vector store for this query. "
-            "I am providing relevant live Ford vehicle safety information instead.\n\n"
-        )
-
         if model and year:
-            live_stats = _get_complaint_stats(model=model, year=year)
-            return notice + live_stats
-
+            return (
+                f"No complaint summaries for Ford {model.upper()} {year} were found in the knowledge base "
+                f"(this model/year may not yet be indexed). "
+                f"The live NHTSA complaint statistics above reflect all {year} {model.title()} complaints on record."
+            )
         return (
-            notice +
-            "If you provide a specific Ford model and year, I can summarize live NHTSA complaint trends or recall data."
+            "No matching complaint summaries were found in the knowledge base for this query. "
+            "If you provide a specific Ford model and year, I can pull live NHTSA complaint trends."
         )
 
     lines = [f"Top {len(docs)} complaints matching '{query}' from the knowledge base:\n"]
