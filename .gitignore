@@ -12,8 +12,8 @@ wheels/
 # Environment — NEVER commit real API keys
 .env
 
-# ChromaDB vector store — large binary, regenerate locally via ingest.py
-chroma_db/
+# ChromaDB vector store is committed to the repo so cloud deployments work without re-ingesting
+# chroma_db/
 
 # macOS
 .DS_Store
