@@ -774,7 +774,7 @@
 
   const protocol = window.location.protocol.startsWith('http') ? window.location.protocol : 'http:';
   const hostname = window.location.hostname || '127.0.0.1';
-  const API_BASE_URL = window.location.port === '8000'
+  const API_BASE_URL = (!window.location.port || window.location.port === '8000')
     ? ''
     : `${protocol}//${hostname}:8000`;
 
