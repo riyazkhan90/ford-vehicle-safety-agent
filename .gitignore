@@ -1,0 +1,26 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# Environment — NEVER commit real API keys
+.env
+
+# ChromaDB vector store — large binary, regenerate locally via ingest.py
+chroma_db/
+
+# macOS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+
+# uv
+.python-version

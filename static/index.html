@@ -1,0 +1,1243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Ford Vehicle Insight — NHTSA Diagnostics</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700&family=IBM+Plex+Mono:wght@400;500&family=Inter:wght@400;500&display=swap" rel="stylesheet" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/9.1.6/marked.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:       #020406;
+      --surface:  rgba(8, 12, 18, 0.92);
+      --sidebar:  rgba(10, 14, 20, 0.96);
+      --amber:    #F3C250;
+      --blue:     #84B9FF;
+      --text:     #F8FAFC;
+      --muted:    #C2D0E0;
+      --border:   rgba(248, 250, 252, 0.16);
+      --user-bg:  rgba(14, 18, 24, 0.94);
+      --shadow:   0 20px 45px rgba(0, 0, 0, 0.45);
+    }
+
+    html, body {
+      height: 100%; overflow: hidden;
+      background:
+        radial-gradient(circle at top left, rgba(248, 250, 252, 0.08), transparent 24%),
+        linear-gradient(135deg, #020406 0%, #060a12 45%, #0f161f 100%);
+      color: var(--text);
+      font-family: 'Inter', sans-serif; font-size: 15px; line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ═══════════════════════════════════════════════════════════
+       ROOT LAYOUT
+    ═══════════════════════════════════════════════════════════ */
+    #layout { display: flex; height: 100vh; overflow: hidden; }
+
+    /* ═══════════════════════════════════════════════════════════
+       SIDEBAR
+    ═══════════════════════════════════════════════════════════ */
+    #sidebar {
+      width: 270px; flex-shrink: 0;
+      background: linear-gradient(180deg, rgba(6, 8, 12, 0.98), rgba(10, 14, 18, 0.95));
+      border-right: 1px solid var(--border);
+      display: flex; flex-direction: column;
+      overflow: hidden; z-index: 10;
+      box-shadow: 16px 0 40px rgba(0, 0, 0, 0.24);
+    }
+
+    #sidebar-header {
+      padding: 14px 12px 12px;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+
+    #new-chat-btn {
+      width: 100%; display: flex; align-items: center;
+      justify-content: center; gap: 7px;
+      padding: 9px 14px;
+      background: rgba(243, 194, 80, 0.08); border: 1px solid rgba(243, 194, 80, 0.4);
+      border-radius: 5px; color: var(--amber);
+      font-family: 'Barlow Condensed', sans-serif; font-weight: 700;
+      font-size: 13px; letter-spacing: 0.16em; text-transform: uppercase;
+      cursor: pointer; transition: background 0.15s; outline: none;
+    }
+    #new-chat-btn:hover  { background: rgba(232,163,61,0.1); }
+    #new-chat-btn:focus-visible { box-shadow: 0 0 0 2px var(--amber); }
+    #new-chat-btn::before { content: '+'; font-size: 16px; line-height: 1; }
+
+    .sidebar-section-label {
+      font-family: 'Barlow Condensed', sans-serif; font-weight: 600;
+      font-size: 10px; letter-spacing: 0.22em; text-transform: uppercase;
+      color: var(--muted); padding: 14px 14px 6px;
+    }
+
+    #history-list {
+      flex: 1; overflow-y: auto; padding: 2px 0 16px;
+    }
+    #history-list::-webkit-scrollbar { width: 3px; }
+    #history-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+    .history-item {
+      padding: 9px 12px 9px 14px; cursor: pointer;
+      margin: 1px 8px; border-radius: 5px;
+      border-left: 2px solid transparent;
+      transition: background 0.12s, border-color 0.12s;
+      outline: none;
+    }
+    .history-item:hover  { background: rgba(248, 250, 252, 0.06); }
+    .history-item:focus-visible { box-shadow: inset 0 0 0 1px var(--amber); }
+    .history-item.active {
+      background: rgba(243, 194, 80, 0.12);
+      border-left-color: var(--amber);
+    }
+    .history-title {
+      font-family: 'Barlow Condensed', sans-serif; font-size: 13px; font-weight: 600;
+      color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      line-height: 1.3;
+    }
+    .history-item.active .history-title { color: var(--amber); }
+    .history-time {
+      font-family: 'IBM Plex Mono', monospace; font-size: 10px;
+      color: var(--muted); margin-top: 3px; letter-spacing: 0.03em;
+    }
+    .history-empty {
+      padding: 20px 14px; font-size: 12px; color: var(--muted); font-style: italic;
+    }
+
+    /* ═══════════════════════════════════════════════════════════
+       MAIN PANEL
+    ═══════════════════════════════════════════════════════════ */
+    #main-panel {
+      flex: 1; min-width: 0;
+      display: flex; flex-direction: column;
+      position: relative;
+      overflow: hidden;
+      isolation: isolate;
+    }
+
+    #main-panel::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background:
+        linear-gradient(125deg, rgba(3, 5, 7, 0.42) 0%, rgba(8, 11, 16, 0.32) 28%, rgba(18, 24, 30, 0.22) 100%),
+        url('Ford_Banner.png') center/cover no-repeat;
+      opacity: 1;
+      z-index: -2;
+      transform: scale(1.02);
+    }
+
+    #main-panel::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(120deg, rgba(216, 220, 226, 0.09), transparent 36%, rgba(255,255,255,0.04));
+      z-index: -1;
+      pointer-events: none;
+    }
+
+    /* ── BACKGROUND CAR ART ── */
+    #car-art {
+      position: absolute; right: -4%; bottom: 70px;
+      width: 88%; max-width: 900px;
+      opacity: 0.07; pointer-events: none; z-index: 0;
+    }
+
+    /* ═══════════════════════════════════════════════════════════
+       TOP BAR
+    ═══════════════════════════════════════════════════════════ */
+    #topbar {
+      position: relative; display: flex; align-items: center;
+      justify-content: space-between; padding: 0 22px; height: 64px;
+      background: rgba(12, 18, 26, 0.86);
+      backdrop-filter: blur(18px);
+      border-bottom: 1px solid rgba(248, 250, 252, 0.12);
+      box-shadow: 0 8px 28px rgba(0, 0, 0, 0.28);
+      overflow: hidden; flex-shrink: 0; z-index: 2;
+    }
+    #topbar::after {
+      content: ''; position: absolute; top: 0; left: -60%; width: 60%; height: 100%;
+      background: linear-gradient(90deg, transparent 0%, rgba(232,163,61,0.18) 40%,
+        rgba(232,163,61,0.35) 50%, rgba(232,163,61,0.18) 60%, transparent 100%);
+      animation: cluster-sweep 1.4s cubic-bezier(0.4,0,0.2,1) 0.3s forwards;
+      pointer-events: none;
+    }
+    @keyframes cluster-sweep {
+      0%   { left: -60%; opacity: 1; }
+      100% { left: 110%; opacity: 0; }
+    }
+
+    .topbar-left  { display: flex; align-items: center; gap: 10px; }
+    .topbar-right { display: flex; align-items: center; gap: 12px; }
+
+    #hamburger-btn {
+      display: none; background: transparent; border: none;
+      color: var(--muted); font-size: 19px; cursor: pointer;
+      padding: 4px 6px; border-radius: 4px; line-height: 1;
+      transition: color 0.15s; outline: none; flex-shrink: 0;
+    }
+    #hamburger-btn:hover { color: var(--text); }
+    #hamburger-btn:focus-visible { box-shadow: 0 0 0 2px var(--amber); }
+
+    .brand-name {
+      font-family: 'Barlow Condensed', sans-serif; font-weight: 700;
+      font-size: 22px; letter-spacing: 0.12em; text-transform: uppercase;
+      color: var(--text); cursor: pointer; transition: color 0.15s;
+      line-height: 1; /* fix baseline misalign with icon */
+    }
+    .brand-name:hover { color: var(--amber); }
+
+    .brand-sub {
+      font-family: 'Barlow Condensed', sans-serif; font-weight: 400;
+      font-size: 13px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--muted);
+    }
+
+    .live-group { display: flex; align-items: center; gap: 8px; }
+    .live-dot {
+      width: 7px; height: 7px; border-radius: 50%; background: var(--amber);
+      animation: pulse 2s ease-in-out infinite; flex-shrink: 0;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(232,163,61,0.5); }
+      50%       { opacity: 0.7; box-shadow: 0 0 0 4px rgba(232,163,61,0); }
+    }
+    .live-label {
+      font-family: 'Barlow Condensed', sans-serif; font-weight: 600;
+      font-size: 12px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--amber);
+    }
+
+    #faq-btn {
+      font-family: 'Barlow Condensed', sans-serif; font-weight: 600;
+      font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase;
+      color: var(--text); background: rgba(248, 250, 252, 0.08);
+      border: 1px solid rgba(248, 250, 252, 0.14); border-radius: 4px;
+      padding: 5px 10px; cursor: pointer; outline: none; white-space: nowrap;
+      transition: color 0.15s, border-color 0.15s;
+    }
+
+    .backend-mode {
+      display: inline-flex; align-items: center; gap: 6px;
+      font-family: 'IBM Plex Mono', monospace; font-size: 11px;
+      letter-spacing: 0.07em; color: var(--text);
+      padding: 7px 12px; border: 1px solid rgba(248, 250, 252, 0.12);
+      border-radius: 999px; background: rgba(248, 250, 252, 0.08);
+      transition: background 0.2s, border-color 0.2s, color 0.2s;
+      white-space: nowrap;
+    }
+    .backend-mode.online {
+      border-color: #74d4ff;
+      background: rgba(116,212,255,0.08);
+      color: #d3f6ff;
+    }
+    .backend-mode.offline {
+      border-color: #f06d6d;
+      background: rgba(240,109,109,0.11);
+      color: #ffd8d8;
+    }
+    #faq-btn:hover { color: var(--text); border-color: var(--amber); }
+    #faq-btn:focus-visible { box-shadow: 0 0 0 2px var(--amber); }
+
+    /* ═══════════════════════════════════════════════════════════
+       CHAT AREA
+    ═══════════════════════════════════════════════════════════ */
+    #chat-area {
+      flex: 1; overflow-y: auto; padding: 28px 0;
+      scroll-behavior: smooth; position: relative; z-index: 1;
+    }
+    #chat-area::-webkit-scrollbar { width: 4px; }
+    #chat-area::-webkit-scrollbar-track { background: transparent; }
+    #chat-area::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+    .messages-wrap {
+      max-width: 820px; margin: 0 auto; padding: 0 22px;
+      display: flex; flex-direction: column; gap: 18px;
+    }
+
+    /* ── WELCOME PANEL ── */
+    #welcome { display: flex; flex-direction: column; gap: 0; }
+    #welcome.hidden { display: none; }
+
+    .wl-header { border-bottom: 1px solid var(--border); padding-bottom: 20px; margin-bottom: 20px; }
+    .wl-title {
+      font-family: 'Barlow Condensed', sans-serif; font-weight: 700;
+      font-size: 30px; letter-spacing: 0.12em; text-transform: uppercase;
+      color: var(--text); line-height: 1.1; margin-bottom: 6px;
+    }
+    .wl-subtitle {
+      font-family: 'Barlow Condensed', sans-serif; font-weight: 400;
+      font-size: 15px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--amber);
+    }
+    .wl-desc { font-size: 13px; color: var(--muted); line-height: 1.7; max-width: 600px; margin-top: 12px; }
+
+    .wl-section-label {
+      font-family: 'Barlow Condensed', sans-serif; font-weight: 700;
+      font-size: 11px; letter-spacing: 0.22em; text-transform: uppercase;
+      color: var(--muted); margin-bottom: 10px;
+    }
+    .wl-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px; }
+    .wl-card {
+      background: linear-gradient(145deg, rgba(17, 22, 27, 0.92), rgba(10, 13, 17, 0.92));
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px 14px;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.03);
+    }
+    .wl-card-label {
+      font-family: 'Barlow Condensed', sans-serif; font-weight: 600;
+      font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase;
+      color: var(--amber); margin-bottom: 4px;
+    }
+    .wl-card-value { font-size: 13px; color: var(--text); line-height: 1.5; }
+    .wl-card-value span { color: var(--muted); }
+
+    .wl-chips-label {
+      font-family: 'Barlow Condensed', sans-serif; font-weight: 700;
+      font-size: 11px; letter-spacing: 0.22em; text-transform: uppercase;
+      color: var(--muted); margin-bottom: 10px;
+    }
+    .wl-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+    .suggestion {
+      background: rgba(12, 16, 21, 0.9); border: 1px solid var(--border); border-radius: 999px;
+      padding: 8px 14px; font-size: 12px; color: var(--muted); cursor: pointer;
+      font-family: 'Inter', sans-serif; transition: border-color 0.15s, color 0.15s, transform 0.15s;
+    }
+    .suggestion:hover { border-color: var(--amber); color: var(--text); transform: translateY(-1px); }
+    .suggestion:hover { border-color: var(--amber); color: var(--text); }
+    .suggestion:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--amber); }
+
+    /* ═══════════════════════════════════════════════════════════
+       MESSAGE BUBBLES
+    ═══════════════════════════════════════════════════════════ */
+    .msg { display: flex; flex-direction: column; max-width: 82%; }
+    .msg.user      { align-self: flex-end;   align-items: flex-end; }
+    .msg.assistant { align-self: flex-start; align-items: flex-start; }
+
+    .msg-role {
+      font-family: 'Barlow Condensed', sans-serif; font-size: 10px; font-weight: 600;
+      letter-spacing: 0.2em; text-transform: uppercase; color: var(--muted); margin-bottom: 5px;
+    }
+    .msg.user .msg-role      { color: var(--blue); }
+    .msg.assistant .msg-role { color: var(--amber); }
+
+    .msg-bubble { padding: 14px 17px; border-radius: 12px; line-height: 1.65; word-break: break-word; box-shadow: var(--shadow); }
+    .msg.user .msg-bubble {
+      background: rgba(14, 20, 28, 0.92); border: 1px solid rgba(248, 250, 252, 0.08); color: var(--text);
+    }
+    .msg.assistant .msg-bubble {
+      background: rgba(12, 16, 22, 0.94); border: 1px solid rgba(248, 250, 252, 0.08);
+      border-left: 3px solid var(--amber); color: var(--text);
+    }
+
+    /* Markdown inside bubbles */
+    .msg-bubble h1, .msg-bubble h2, .msg-bubble h3, .msg-bubble h4 {
+      font-family: 'Barlow Condensed', sans-serif; font-weight: 700;
+      text-transform: uppercase; letter-spacing: 0.1em; color: var(--amber);
+      margin: 16px 0 7px; line-height: 1.2;
+    }
+    .msg-bubble h3 { font-size: 15px; border-bottom: 1px solid rgba(232,163,61,0.2); padding-bottom: 4px; }
+    .msg-bubble h4 { font-size: 13px; color: var(--muted); }
+    .msg-bubble h3:first-child, .msg-bubble h4:first-child { margin-top: 0; }
+    .msg-bubble p  { margin: 0 0 10px; }
+    .msg-bubble p:last-child { margin-bottom: 0; }
+    .msg-bubble ul, .msg-bubble ol { margin: 4px 0 10px; padding: 0; list-style: none; }
+    .msg-bubble li { position: relative; padding: 3px 0 3px 16px; color: var(--text); }
+    .msg-bubble li::before { content: '—'; position: absolute; left: 0; color: var(--amber); opacity: 0.65; }
+    .msg-bubble strong { color: var(--text); font-weight: 600; }
+    .msg-bubble em     { color: var(--muted); font-style: italic; }
+    .msg-bubble code {
+      font-family: 'IBM Plex Mono', monospace; font-size: 0.88em;
+      background: rgba(79,168,224,0.08); color: var(--blue); border-radius: 3px; padding: 1px 4px;
+    }
+    .msg-bubble .num {
+      font-family: 'IBM Plex Mono', monospace; font-size: 0.91em; font-weight: 500;
+      color: var(--blue); background: rgba(79,168,224,0.1);
+      border-radius: 3px; padding: 0 3px; letter-spacing: 0.03em;
+    }
+
+    /* Error bubble */
+    .msg-bubble.error { border-left-color: #e05252 !important; background: rgba(224,82,82,0.06) !important; }
+    .msg-bubble.error .err-label {
+      font-family: 'Barlow Condensed', sans-serif; font-weight: 700;
+      font-size: 10px; letter-spacing: 0.2em; text-transform: uppercase;
+      color: #e05252; display: block; margin-bottom: 6px;
+    }
+    .msg-bubble.error .err-body { color: var(--muted); font-size: 13px; }
+
+    .msg-subnote {
+      margin-top: 9px;
+      padding: 10px 14px;
+      background: rgba(248, 250, 252, 0.05);
+      border-left: 3px solid rgba(248, 250, 252, 0.22);
+      border-radius: 0 0 10px 10px;
+      color: var(--muted);
+      font-size: 0.88rem;
+      line-height: 1.5;
+      font-family: 'Inter', sans-serif;
+    }
+
+    .msg.notice { align-self: flex-start; align-items: flex-start; }
+    .msg.notice .msg-role { color: var(--muted); }
+    .msg-bubble.notice {
+      background: rgba(248, 250, 252, 0.06);
+      border: 1px dashed rgba(248, 250, 252, 0.18);
+      color: var(--muted);
+      font-size: 0.95rem;
+    }
+
+    /* Typing indicator */
+    .typing-indicator {
+      display: flex; align-items: center; gap: 5px; padding: 14px 17px;
+      background: var(--surface); border: 1px solid var(--border);
+      border-left: 3px solid var(--amber); border-radius: 6px;
+    }
+    .typing-indicator span {
+      width: 6px; height: 6px; border-radius: 50%; background: var(--amber);
+      animation: bounce 1.2s ease-in-out infinite;
+    }
+    .typing-indicator span:nth-child(2) { animation-delay: 0.2s; }
+    .typing-indicator span:nth-child(3) { animation-delay: 0.4s; }
+    @keyframes bounce {
+      0%, 80%, 100% { transform: translateY(0); opacity: 0.4; }
+      40%            { transform: translateY(-5px); opacity: 1; }
+    }
+
+    /* ═══════════════════════════════════════════════════════════
+       INPUT STRIP
+    ═══════════════════════════════════════════════════════════ */
+    #input-strip {
+      background: rgba(8, 11, 15, 0.78); backdrop-filter: blur(14px);
+      border-top: 1px solid rgba(216, 220, 226, 0.16);
+      padding: 16px 22px; flex-shrink: 0; position: relative; z-index: 2;
+      box-shadow: 0 -10px 28px rgba(0, 0, 0, 0.16);
+    }
+    #input-wrap { max-width: 820px; margin: 0 auto; display: flex; gap: 10px; align-items: flex-end; }
+    #msg-input {
+      flex: 1; background: rgba(4, 6, 9, 0.92); border: 1px solid var(--border); border-radius: 12px;
+      color: var(--text); font-family: 'Inter', sans-serif; font-size: 14px;
+      padding: 12px 14px; resize: none; min-height: 46px; max-height: 140px;
+      overflow-y: auto; line-height: 1.5; transition: border-color 0.2s, box-shadow 0.2s; outline: none;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.03);
+    }
+    #msg-input::placeholder { color: var(--muted); }
+    #msg-input:focus { border-color: var(--amber); box-shadow: 0 0 0 2px rgba(232,163,61,0.15); }
+
+    #stop-btn {
+      display: none; background: transparent; color: #e05252;
+      border: 1px solid #e05252; border-radius: 6px; padding: 11px 16px;
+      font-family: 'Barlow Condensed', sans-serif; font-weight: 700;
+      font-size: 13px; letter-spacing: 0.14em; text-transform: uppercase;
+      cursor: pointer; white-space: nowrap; height: 44px; outline: none;
+      transition: background 0.15s;
+    }
+    #stop-btn:hover { background: rgba(224,82,82,0.1); }
+    #stop-btn:focus-visible { box-shadow: 0 0 0 2px #e05252; }
+    #stop-btn.visible { display: block; }
+
+    #send-btn {
+      background: linear-gradient(135deg, rgba(216, 220, 226, 0.95), rgba(182, 188, 196, 0.92)); color: #05070B; border: none; border-radius: 12px;
+      padding: 11px 20px; font-family: 'Barlow Condensed', sans-serif; font-weight: 700;
+      font-size: 13px; letter-spacing: 0.14em; text-transform: uppercase;
+      cursor: pointer; white-space: nowrap; height: 46px; outline: none;
+      transition: transform 0.15s, box-shadow 0.15s, opacity 0.15s;
+      box-shadow: 0 10px 22px rgba(216, 220, 226, 0.18);
+    }
+    #send-btn:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 12px 24px rgba(216, 220, 226, 0.24); }
+    #send-btn:focus-visible { box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--amber); }
+    #send-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+    #statusbar {
+      display: flex; align-items: center; justify-content: space-between;
+      max-width: 820px; margin: 6px auto 0; padding: 0 2px;
+    }
+    .status-tag { font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: var(--muted); letter-spacing: 0.05em; }
+    .status-tag.active { color: var(--blue); }
+
+    /* ═══════════════════════════════════════════════════════════
+       FAQ MODAL
+    ═══════════════════════════════════════════════════════════ */
+    #faq-overlay {
+      display: none; position: fixed; inset: 0;
+      background: rgba(0,0,0,0.6); z-index: 200;
+      align-items: flex-start; justify-content: flex-end;
+      padding: 68px 20px 20px;
+    }
+    #faq-overlay.open { display: flex; }
+    #faq-panel {
+      background: var(--surface); border: 1px solid var(--border);
+      border-left: 3px solid var(--amber); border-radius: 6px;
+      width: 100%; max-width: 480px; max-height: calc(100vh - 100px);
+      overflow-y: auto; padding: 24px;
+      animation: faq-in 0.2s ease;
+    }
+    @keyframes faq-in {
+      from { opacity: 0; transform: translateX(16px); }
+      to   { opacity: 1; transform: translateX(0); }
+    }
+    #faq-panel::-webkit-scrollbar { width: 3px; }
+    #faq-panel::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+    .faq-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
+    .faq-title {
+      font-family: 'Barlow Condensed', sans-serif; font-weight: 700;
+      font-size: 16px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--text);
+    }
+    #faq-close {
+      background: transparent; border: none; color: var(--muted);
+      font-size: 20px; cursor: pointer; line-height: 1; padding: 2px 6px;
+      border-radius: 3px; transition: color 0.15s;
+    }
+    #faq-close:hover { color: var(--text); }
+    #faq-close:focus-visible { outline: 2px solid var(--amber); }
+    .faq-item { margin-bottom: 18px; padding-bottom: 18px; border-bottom: 1px solid var(--border); }
+    .faq-item:last-child { margin-bottom: 0; padding-bottom: 0; border-bottom: none; }
+    .faq-q {
+      font-family: 'Barlow Condensed', sans-serif; font-weight: 700;
+      font-size: 13px; letter-spacing: 0.1em; text-transform: uppercase;
+      color: var(--amber); margin-bottom: 6px;
+    }
+    .faq-a { font-size: 13px; color: var(--muted); line-height: 1.7; }
+
+    /* ═══════════════════════════════════════════════════════════
+       SIDEBAR MOBILE OVERLAY
+    ═══════════════════════════════════════════════════════════ */
+    #sidebar-overlay {
+      display: none; position: fixed; inset: 0;
+      background: rgba(0,0,0,0.55); z-index: 9;
+    }
+    #sidebar-overlay.visible { display: block; }
+
+    /* ═══════════════════════════════════════════════════════════
+       RESPONSIVE
+    ═══════════════════════════════════════════════════════════ */
+    @media (max-width: 720px) {
+      #sidebar {
+        position: fixed; top: 0; bottom: 0; left: 0;
+        transform: translateX(-100%);
+        transition: transform 0.25s ease;
+        z-index: 50; width: 260px;
+      }
+      #sidebar.open { transform: translateX(0); }
+      #hamburger-btn { display: flex; align-items: center; }
+      .brand-sub { display: none; }
+      #topbar { padding: 0 14px; }
+      #input-strip { padding: 12px 14px; }
+      .messages-wrap { padding: 0 14px; }
+      .msg { max-width: 94%; }
+      #send-btn { padding: 11px 14px; }
+      #faq-overlay { padding: 68px 10px 10px; }
+      #faq-panel { max-width: 100%; }
+    }
+    @media (max-width: 480px) {
+      .wl-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- BACKGROUND: Muscle-car engineering schematic (inside #main-panel via absolute pos) -->
+
+<!-- FAQ MODAL -->
+<div id="faq-overlay" role="dialog" aria-modal="true" aria-labelledby="faq-title">
+  <div id="faq-panel">
+    <div class="faq-header">
+      <span class="faq-title" id="faq-title">System FAQ</span>
+      <button id="faq-close" aria-label="Close FAQ">&times;</button>
+    </div>
+    <div class="faq-item">
+      <div class="faq-q">What is this?</div>
+      <div class="faq-a">A diagnostics assistant that answers questions about Ford vehicle safety complaints and recalls using live, public NHTSA data.</div>
+    </div>
+    <div class="faq-item">
+      <div class="faq-q">What can I ask?</div>
+      <div class="faq-a">Complaint trends by model and year ("What's the most common Explorer issue in 2022?"), open recalls for a specific model/year, or specific complaint narratives ("Any transmission reports on the Bronco?").</div>
+    </div>
+    <div class="faq-item">
+      <div class="faq-q">Which models and years are covered?</div>
+      <div class="faq-a">Ford Bronco, Explorer, Mustang, Escape, and Edge — model years 2020 to 2024.</div>
+    </div>
+    <div class="faq-item">
+      <div class="faq-q">Where does the data come from?</div>
+      <div class="faq-a">Two live sources: NHTSA's public complaints and recalls APIs (official government data, no API key needed), plus a local vector index of complaint text for semantic search.</div>
+    </div>
+    <div class="faq-item">
+      <div class="faq-q">Is this an official Ford product?</div>
+      <div class="faq-a">No. This is an independent portfolio project built on public government data. It is not affiliated with or endorsed by Ford Motor Company.</div>
+    </div>
+  </div>
+</div>
+
+<!-- MOBILE: overlay behind sidebar when open -->
+<div id="sidebar-overlay" aria-hidden="true"></div>
+
+<!-- ROOT LAYOUT -->
+<div id="layout">
+
+  <!-- ── SIDEBAR ──────────────────────────────────────────────── -->
+  <aside id="sidebar" aria-label="Conversation history">
+    <div id="sidebar-header">
+      <button id="new-chat-btn" aria-label="Start new insight">New Insight</button>
+    </div>
+    <div class="sidebar-section-label">Recent Sessions</div>
+    <div id="history-list" role="list" aria-label="Past conversations"></div>
+  </aside>
+
+  <!-- ── MAIN PANEL ────────────────────────────────────────────── -->
+  <div id="main-panel">
+
+    <!-- Car art sits inside main-panel so it doesn't bleed under sidebar -->
+    <svg id="car-art" viewBox="0 0 1100 430" xmlns="http://www.w3.org/2000/svg"
+         aria-hidden="true" focusable="false">
+      <g fill="none" stroke="#E8A33D" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="55" y1="388" x2="1045" y2="388" stroke-width="0.8" stroke-dasharray="14,6"/>
+        <path stroke-width="1.8" d="
+          M 105,388 C 102,368 100,348 100,326
+          L 118,312 C 132,303 150,296 170,290
+          L 228,278 C 272,270 318,264 365,259
+          L 428,255 C 456,254 466,247 475,234
+          L 508,196 C 524,173 544,158 568,151
+          L 706,147 C 738,147 758,154 771,169
+          C 804,200 822,232 830,262
+          L 842,292 C 850,312 856,332 858,355
+          C 860,368 861,378 861,388
+          L 882,388 C 882,290 763,290 763,388
+          L 316,388 C 316,284 200,284 200,388 Z
+        "/>
+        <circle cx="258" cy="334" r="54" stroke-width="1.4"/>
+        <circle cx="258" cy="334" r="34" stroke-width="0.9"/>
+        <circle cx="258" cy="334" r="7"  stroke-width="0.9"/>
+        <line x1="258" y1="300" x2="258" y2="327" stroke-width="0.9"/>
+        <line x1="258" y1="341" x2="258" y2="368" stroke-width="0.9"/>
+        <line x1="224" y1="334" x2="251" y2="334" stroke-width="0.9"/>
+        <line x1="265" y1="334" x2="292" y2="334" stroke-width="0.9"/>
+        <line x1="232" y1="308" x2="249" y2="325" stroke-width="0.9"/>
+        <line x1="267" y1="343" x2="284" y2="360" stroke-width="0.9"/>
+        <line x1="284" y1="308" x2="267" y2="325" stroke-width="0.9"/>
+        <line x1="249" y1="343" x2="232" y2="360" stroke-width="0.9"/>
+        <circle cx="822" cy="332" r="56" stroke-width="1.4"/>
+        <circle cx="822" cy="332" r="36" stroke-width="0.9"/>
+        <circle cx="822" cy="332" r="7"  stroke-width="0.9"/>
+        <line x1="822" y1="296" x2="822" y2="325" stroke-width="0.9"/>
+        <line x1="822" y1="339" x2="822" y2="368" stroke-width="0.9"/>
+        <line x1="786" y1="332" x2="815" y2="332" stroke-width="0.9"/>
+        <line x1="829" y1="332" x2="858" y2="332" stroke-width="0.9"/>
+        <line x1="796" y1="306" x2="813" y2="323" stroke-width="0.9"/>
+        <line x1="831" y1="341" x2="848" y2="358" stroke-width="0.9"/>
+        <line x1="848" y1="306" x2="831" y2="323" stroke-width="0.9"/>
+        <line x1="813" y1="341" x2="796" y2="358" stroke-width="0.9"/>
+        <path stroke-width="1" d="M 308,261 L 326,246 L 382,244 L 400,260"/>
+        <path stroke-width="0.9" stroke-dasharray="5,3" d="
+          M 508,196 C 520,174 542,158 568,151
+          L 706,147 C 736,147 755,153 769,167
+          L 726,196 C 710,210 695,218 672,220
+          L 540,220 C 522,220 513,210 508,196 Z
+        "/>
+        <path stroke-width="0.8" stroke-dasharray="7,4" d="
+          M 435,255 C 442,278 446,314 446,360
+          L 614,360 C 620,314 628,278 636,260
+        "/>
+        <line x1="200" y1="370" x2="316" y2="370" stroke-width="0.7" stroke-dasharray="4,3"/>
+        <line x1="763" y1="370" x2="862" y2="370" stroke-width="0.7" stroke-dasharray="4,3"/>
+        <line x1="258" y1="274" x2="258" y2="398" stroke-width="0.6" stroke-dasharray="3,3"/>
+        <line x1="822" y1="270" x2="822" y2="398" stroke-width="0.6" stroke-dasharray="3,3"/>
+        <line x1="258" y1="410" x2="822" y2="410" stroke-width="0.7" stroke-dasharray="9,4"/>
+        <line x1="258" y1="403" x2="258" y2="417" stroke-width="1"/>
+        <line x1="822" y1="403" x2="822" y2="417" stroke-width="1"/>
+        <line x1="228" y1="278" x2="228" y2="270" stroke-width="0.6"/>
+        <line x1="280" y1="272" x2="280" y2="264" stroke-width="0.6"/>
+        <line x1="340" y1="266" x2="340" y2="258" stroke-width="0.6"/>
+        <line x1="400" y1="260" x2="400" y2="252" stroke-width="0.6"/>
+        <line x1="568" y1="149" x2="706" y2="147" stroke-width="0.5" stroke-dasharray="4,4"/>
+      </g>
+    </svg>
+
+    <!-- TOP BAR -->
+    <header id="topbar" role="banner">
+      <div class="topbar-left">
+        <button id="hamburger-btn" aria-label="Toggle sidebar" aria-expanded="false">&#9776;</button>
+        <span class="brand-name" id="brand-home" role="button" tabindex="0"
+              aria-label="Home / new insight">Ford Vehicle Insight</span>
+        <span class="brand-sub">NHTSA Diagnostic System</span>
+      </div>
+      <div class="topbar-right">
+        <button id="faq-btn" aria-haspopup="dialog" aria-expanded="false">Knowledge Base</button>
+        <span id="backend-mode" class="backend-mode" aria-live="polite">Checking backend…</span>
+        <div class="live-group">
+          <div class="live-dot" aria-hidden="true"></div>
+          <span class="live-label">Live&thinsp;&mdash;&thinsp;NHTSA Data</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- CHAT AREA -->
+    <main id="chat-area" role="main" aria-label="Diagnostic conversation">
+      <div class="messages-wrap" id="messages">
+
+        <div id="welcome" role="region" aria-label="Welcome">
+          <div class="wl-header">
+            <div class="wl-title">Ford Vehicle Insight</div>
+            <div class="wl-subtitle">AI Diagnostics over live NHTSA vehicle safety data</div>
+            <p class="wl-desc">
+              This tool answers questions about Ford vehicle complaints and recalls using
+              real-time public government data — not a database snapshot, not simulated answers.
+              Built as an independent portfolio project; not affiliated with or endorsed by Ford Motor Company.
+            </p>
+          </div>
+          <div class="wl-section-label">What you can search</div>
+          <div class="wl-grid">
+            <div class="wl-card">
+              <div class="wl-card-label">Models</div>
+              <div class="wl-card-value">Bronco &middot; Explorer &middot; Mustang &middot; Escape &middot; Edge</div>
+            </div>
+            <div class="wl-card">
+              <div class="wl-card-label">Model Years</div>
+              <div class="wl-card-value">2020 &ndash; 2024</div>
+            </div>
+            <div class="wl-card">
+              <div class="wl-card-label">Complaint Stats</div>
+              <div class="wl-card-value">Most common issues by model &amp; year, ranked by category</div>
+            </div>
+            <div class="wl-card">
+              <div class="wl-card-label">Recalls</div>
+              <div class="wl-card-value">Campaign numbers, components, remedies &mdash; by model &amp; year</div>
+            </div>
+            <div class="wl-card" style="grid-column: 1 / -1;">
+              <div class="wl-card-label">Semantic Complaint Search</div>
+              <div class="wl-card-value">Natural-language search over real complaint text
+                <span>(e.g. "transmission slipping," "backup camera failure")</span></div>
+            </div>
+            <div class="wl-card" style="grid-column: 1 / -1; background: rgba(116, 212, 255, 0.05); border-color: rgba(116, 212, 255, 0.18);">
+              <div class="wl-card-label">FAQ Quick Access</div>
+              <div class="wl-card-value">Click the example query below or ask directly: <strong>What information can you help me with?</strong></div>
+            </div>
+          </div>
+          <div class="wl-chips-label">Example queries — click to load</div>
+          <div class="wl-chips" role="list">
+            <button class="suggestion" role="listitem">What's the most common Explorer issue in 2022?</button>
+            <button class="suggestion" role="listitem">Any open recalls on the 2023 Bronco?</button>
+            <button class="suggestion" role="listitem">Search for transmission complaints on the Mustang</button>
+            <button class="suggestion" role="listitem">What information can you help me with?</button>
+            <button class="suggestion" role="listitem">What models and years are available?</button>
+          </div>
+        </div>
+
+      </div>
+    </main>
+
+    <!-- INPUT STRIP -->
+    <footer id="input-strip" role="contentinfo">
+      <div id="input-wrap">
+        <textarea id="msg-input" placeholder="Enter vehicle model, complaint type, or recall query…"
+                  rows="1" aria-label="Message input" autocomplete="off" spellcheck="true"></textarea>
+        <button id="stop-btn" aria-label="Stop response">STOP</button>
+        <button id="send-btn" aria-label="Send message" disabled>SEND</button>
+      </div>
+      <div id="statusbar">
+        <span class="status-tag" id="thread-tag">SESSION&nbsp;—&nbsp;INIT</span>
+        <span class="status-tag" id="status-label">STANDBY</span>
+      </div>
+    </footer>
+
+  </div><!-- /#main-panel -->
+</div><!-- /#layout -->
+
+<script>
+  /* ══════════════════════════════════════════════════════════════
+     CONFIG
+  ══════════════════════════════════════════════════════════════ */
+  marked.setOptions({ breaks: true, gfm: true });
+  const HISTORY_KEY = 'fordDiagChatHistory';
+
+  /* ══════════════════════════════════════════════════════════════
+     STATE
+  ══════════════════════════════════════════════════════════════ */
+  let threadId   = null;
+  let isLoading  = false;
+  let controller = null;
+
+  const messagesEl  = document.getElementById('messages');
+  const welcomeEl   = document.getElementById('welcome');
+  const inputEl     = document.getElementById('msg-input');
+  const sendBtn     = document.getElementById('send-btn');
+  const stopBtn     = document.getElementById('stop-btn');
+  const threadTag   = document.getElementById('thread-tag');
+  const statusLabel = document.getElementById('status-label');
+  const backendMode = document.getElementById('backend-mode');
+  const historyList = document.getElementById('history-list');
+  const sidebar     = document.getElementById('sidebar');
+  const overlay     = document.getElementById('sidebar-overlay');
+  const hamburger   = document.getElementById('hamburger-btn');
+
+  const protocol = window.location.protocol.startsWith('http') ? window.location.protocol : 'http:';
+  const hostname = window.location.hostname || '127.0.0.1';
+  const API_BASE_URL = window.location.port === '8000'
+    ? ''
+    : `${protocol}//${hostname}:8000`;
+
+  /* ══════════════════════════════════════════════════════════════
+     LOCALSTORAGE HELPERS
+  ══════════════════════════════════════════════════════════════ */
+  function loadHistory() {
+    try { return JSON.parse(localStorage.getItem(HISTORY_KEY)) || []; }
+    catch { return []; }
+  }
+  function saveHistory(h) {
+    try { localStorage.setItem(HISTORY_KEY, JSON.stringify(h)); } catch {}
+  }
+
+  /* ══════════════════════════════════════════════════════════════
+     RELATIVE TIME
+  ══════════════════════════════════════════════════════════════ */
+  function relativeTime(iso) {
+    const m = Math.floor((Date.now() - new Date(iso)) / 60000);
+    if (m < 1)  return 'just now';
+    if (m < 60) return `${m}m ago`;
+    const h = Math.floor(m / 60);
+    if (h < 24) return `${h}h ago`;
+    const d = Math.floor(h / 24);
+    return d === 1 ? 'yesterday' : `${d}d ago`;
+  }
+
+  /* ══════════════════════════════════════════════════════════════
+     SIDEBAR
+  ══════════════════════════════════════════════════════════════ */
+  function openSidebar() {
+    sidebar.classList.add('open');
+    overlay.classList.add('visible');
+    hamburger.setAttribute('aria-expanded', 'true');
+  }
+  function closeSidebar() {
+    sidebar.classList.remove('open');
+    overlay.classList.remove('visible');
+    hamburger.setAttribute('aria-expanded', 'false');
+  }
+
+  function setActiveSidebarItem(tid) {
+    historyList.querySelectorAll('.history-item').forEach(el => {
+      el.classList.toggle('active', el.dataset.threadId === tid);
+    });
+  }
+
+  function renderSidebar() {
+    const history = loadHistory();
+    historyList.innerHTML = '';
+
+    if (history.length === 0) {
+      const empty = document.createElement('div');
+      empty.className = 'history-empty';
+      empty.textContent = 'No conversations yet';
+      historyList.appendChild(empty);
+      return;
+    }
+
+    history.forEach(entry => {
+      const item = document.createElement('div');
+      item.className = 'history-item' + (entry.thread_id === threadId ? ' active' : '');
+      item.dataset.threadId = entry.thread_id;
+      item.setAttribute('role', 'listitem');
+      item.setAttribute('tabindex', '0');
+      item.setAttribute('aria-label', `Load: ${entry.title}`);
+
+      const title = document.createElement('div');
+      title.className = 'history-title';
+      title.textContent = entry.title || 'Untitled';
+
+      const time = document.createElement('div');
+      time.className = 'history-time';
+      time.textContent = relativeTime(entry.timestamp);
+
+      item.appendChild(title);
+      item.appendChild(time);
+
+      item.addEventListener('click', () => loadChat(entry));
+      item.addEventListener('keydown', e => {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); loadChat(entry); }
+      });
+
+      historyList.appendChild(item);
+    });
+  }
+
+  /* ══════════════════════════════════════════════════════════════
+     CHAT STATE MANAGEMENT
+  ══════════════════════════════════════════════════════════════ */
+  function clearMessages() {
+    messagesEl.querySelectorAll('.msg').forEach(el => el.remove());
+  }
+
+  function startNewChat() {
+    if (isLoading) return;
+    clearMessages();
+    welcomeEl.classList.remove('hidden');
+    threadId = null;
+    updateThreadTag(null);
+    setStatus('STANDBY');
+    setActiveSidebarItem(null);
+    closeSidebar();
+    inputEl.focus();
+  }
+
+  function loadChat(entry) {
+    if (isLoading) return;
+    clearMessages();
+    welcomeEl.classList.add('hidden');
+    threadId = entry.thread_id;
+    updateThreadTag(threadId);
+    // Render stored messages without intermediate scrolls
+    entry.messages.forEach(({ role, content }) => appendMessage(role, content, false));
+    scrollBottom();
+    setActiveSidebarItem(entry.thread_id);
+    setStatus('READY');
+    closeSidebar();
+    inputEl.focus();
+  }
+
+  /* Persist a completed exchange (user + assistant) to localStorage */
+  function persistExchange(userText, assistantText) {
+    const history = loadHistory();
+    const idx = history.findIndex(h => h.thread_id === threadId);
+    if (idx >= 0) {
+      history[idx].messages.push(
+        { role: 'user',      content: userText },
+        { role: 'assistant', content: assistantText }
+      );
+      history[idx].timestamp = new Date().toISOString();
+      // Bubble to top (most-recent-first)
+      const [entry] = history.splice(idx, 1);
+      history.unshift(entry);
+    } else {
+      const title = userText.slice(0, 40) + (userText.length > 40 ? '…' : '');
+      history.unshift({
+        thread_id: threadId,
+        title,
+        timestamp: new Date().toISOString(),
+        messages: [
+          { role: 'user',      content: userText },
+          { role: 'assistant', content: assistantText }
+        ]
+      });
+    }
+    saveHistory(history);
+    renderSidebar();
+  }
+
+  /* ══════════════════════════════════════════════════════════════
+     RENDERING UTILITIES
+  ══════════════════════════════════════════════════════════════ */
+  function highlightNumbersInHtml(html) {
+    return html.replace(
+      /(<[^>]*>)|(\b\d{1,3}(?:,\d{3})*(?:\.\d+)?|\d{8,11}|\d+(?:\.\d+)?)\b/g,
+      (m, tag, num) => tag ? tag : `<span class="num">${num}</span>`
+    );
+  }
+
+  function decodeHtmlEntities(str) {
+    const txt = document.createElement('textarea');
+    txt.innerHTML = str;
+    let decoded = txt.value;
+    if (decoded !== str) {
+      txt.innerHTML = decoded;
+      decoded = txt.value;
+    }
+    return decoded
+      .replace(/&(?:amp;)*#(?:x27|39);?/gi, "'")
+      .replace(/&(?:amp;)*apos;?/gi, "'");
+  }
+
+  function normalizeResponseText(text) {
+    return decodeHtmlEntities(String(text || ''))
+      .replace(/\u2019/g, "'")
+      .replace(/\u2018/g, "'");
+  }
+
+  function sanitizeHtmlEntities(html) {
+    return String(html)
+      .replace(/&(?:amp;)*#(?:x27|39);?/gi, "'")
+      .replace(/&(?:amp;)*apos;?/gi, "'");
+  }
+
+  function appendMessage(role, text, scroll = true, note = null) {
+    welcomeEl.classList.add('hidden');
+
+    const wrap = document.createElement('div');
+    wrap.className = `msg ${role}`;
+    wrap.setAttribute('role', 'article');
+    wrap.setAttribute('aria-label', `${role === 'user' ? 'You' : 'Assistant'}: ${text.slice(0, 80)}`);
+
+    const label = document.createElement('div');
+    label.className = 'msg-role';
+    label.textContent = role === 'user' ? 'Operator' : 'Diagnostics AI';
+
+    const bubble = document.createElement('div');
+    bubble.className = 'msg-bubble';
+    if (role === 'assistant') {
+      const decodedText = normalizeResponseText(text);
+      const parsedHtml = marked.parse(decodedText);
+      bubble.innerHTML = highlightNumbersInHtml(sanitizeHtmlEntities(parsedHtml));
+    } else {
+      bubble.textContent = text;
+    }
+
+    wrap.appendChild(label);
+    wrap.appendChild(bubble);
+
+    if (note && role === 'assistant') {
+      const noteEl = document.createElement('div');
+      noteEl.className = 'msg-subnote';
+      noteEl.textContent = note;
+      wrap.appendChild(noteEl);
+    }
+
+    messagesEl.appendChild(wrap);
+    if (scroll) scrollBottom();
+    return wrap;
+  }
+
+  function appendNotice(text, scroll = true) {
+    const wrap = document.createElement('div');
+    wrap.className = 'msg notice';
+    wrap.setAttribute('role', 'status');
+
+    const label = document.createElement('div');
+    label.className = 'msg-role';
+    label.textContent = 'Notice';
+
+    const bubble = document.createElement('div');
+    bubble.className = 'msg-bubble notice';
+    bubble.textContent = text;
+
+    wrap.appendChild(label);
+    wrap.appendChild(bubble);
+    messagesEl.appendChild(wrap);
+    if (scroll) scrollBottom();
+    return wrap;
+  }
+
+  function appendError(status, detail) {
+    welcomeEl.classList.add('hidden');
+    const wrap = document.createElement('div');
+    wrap.className = 'msg assistant';
+    wrap.setAttribute('role', 'article');
+    const label = document.createElement('div');
+    label.className = 'msg-role'; label.textContent = 'Diagnostics AI';
+    const bubble = document.createElement('div');
+    bubble.className = 'msg-bubble error';
+    bubble.innerHTML = `<span class="err-label">⚠ ${status}</span><span class="err-body">${
+      detail.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    }</span>`;
+    wrap.appendChild(label); wrap.appendChild(bubble);
+    messagesEl.appendChild(wrap); scrollBottom();
+  }
+
+  function showTyping() {
+    const wrap = document.createElement('div');
+    wrap.className = 'msg assistant'; wrap.id = 'typing';
+    wrap.setAttribute('aria-live', 'polite');
+    const label = document.createElement('div');
+    label.className = 'msg-role'; label.textContent = 'Diagnostics AI';
+    const ind = document.createElement('div');
+    ind.className = 'typing-indicator';
+    ind.innerHTML = '<span></span><span></span><span></span>';
+    wrap.appendChild(label); wrap.appendChild(ind);
+    messagesEl.appendChild(wrap); scrollBottom();
+  }
+  function hideTyping() { const el = document.getElementById('typing'); if (el) el.remove(); }
+
+  function scrollBottom() { document.getElementById('chat-area').scrollTop = 9e9; }
+
+  function setStatus(text, active = false) {
+    statusLabel.textContent = text;
+    statusLabel.className = `status-tag${active ? ' active' : ''}`;
+  }
+  function updateThreadTag(id) {
+    threadTag.textContent = `SESSION — ${id ? id.split('-')[0].toUpperCase() : 'INIT'}`;
+  }
+  function autoResize() {
+    inputEl.style.height = 'auto';
+    inputEl.style.height = Math.min(inputEl.scrollHeight, 140) + 'px';
+  }
+  function setLoading(on) {
+    isLoading = on;
+    sendBtn.disabled = on || inputEl.value.trim() === '';
+    inputEl.disabled = on;
+    stopBtn.classList.toggle('visible', on);
+  }
+
+  function isHelpPrompt(text) {
+    const normalized = text.trim().toLowerCase();
+    return /\b(help|information|informations|what can you|what can i ask|what do you do|what can i ask you)\b/.test(normalized);
+  }
+
+  function helpFallback() {
+    return (
+      'I can help with Ford vehicle safety questions such as common complaint patterns, open recalls, and component issue trends for Bronco, Explorer, Mustang, Escape, and Edge from 2020–2024. '
+      + 'Ask me things like "What are the top issues on a 2022 Explorer?" or "Any open recalls on the 2023 Bronco?"'
+    );
+  }
+
+  async function checkBackend() {
+    if (!backendMode) return;
+    try {
+      const res = await fetch(`${API_BASE_URL}/health`, { method: 'GET', cache: 'no-store' });
+      if (res.ok) {
+        backendMode.textContent = 'Backend connected';
+        backendMode.classList.add('online');
+        backendMode.classList.remove('offline');
+        return;
+      }
+    } catch (err) {
+      // ignore and fall through to offline state
+    }
+    backendMode.textContent = 'Static preview (no backend)';
+    backendMode.classList.add('offline');
+    backendMode.classList.remove('online');
+  }
+
+  /* ══════════════════════════════════════════════════════
+     SEND MESSAGE
+  ══════════════════════════════════════════════════════════════ */
+  async function sendMessage(text) {
+    if (!text.trim() || isLoading) return;
+    const userText = text.trim();
+
+    setLoading(true);
+    setStatus('QUERYING…', true);
+    appendMessage('user', userText);
+    inputEl.value = ''; autoResize(); showTyping();
+
+    controller = new AbortController();
+    try {
+      const res = await fetch(`${API_BASE_URL}/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: userText, thread_id: threadId }),
+        signal: controller.signal,
+      });
+
+      if (!res.ok) {
+        if (isHelpPrompt(userText)) {
+          const fallback = helpFallback();
+          hideTyping();
+          appendMessage('assistant', fallback);
+          setStatus('READY');
+          persistExchange(userText, fallback);
+          return;
+        }
+
+        let detail = `HTTP ${res.status}`;
+        try {
+          const body = await res.json();
+          detail = body.detail || JSON.stringify(body);
+        } catch (_) {
+          try { detail = await res.text() || detail; } catch (_) {}
+        }
+        hideTyping();
+        appendError(`Error ${res.status}`, detail);
+        setStatus('ERROR');
+        return;
+      }
+
+      const data = await res.json();
+      threadId = data.thread_id;
+      updateThreadTag(threadId);
+      hideTyping();
+
+      let assistantNote = data.notice || null;
+      if (!assistantNote && data.fallback) {
+        assistantNote = 'Model rate-limited; using fallback response.';
+      }
+
+      appendMessage('assistant', data.response, true, assistantNote);
+      setStatus('READY');
+
+      // Persist exchange to localStorage and refresh sidebar
+      persistExchange(userText, data.response);
+
+    } catch (err) {
+      hideTyping();
+      if (isHelpPrompt(userText)) {
+        const fallback = helpFallback();
+        appendMessage('assistant', fallback);
+        setStatus('READY');
+        persistExchange(userText, fallback);
+      } else if (err.name === 'AbortError') {
+        appendError('Request Cancelled', 'The request was stopped before a response was received.');
+        setStatus('STOPPED');
+      } else {
+        appendError('Network Error', err.message || 'Could not reach the server.');
+        setStatus('ERROR');
+      }
+    } finally {
+      controller = null;
+      setLoading(false);
+      inputEl.focus();
+    }
+  }
+
+  /* ══════════════════════════════════════════════════════════════
+     EVENT WIRING
+  ══════════════════════════════════════════════════════════════ */
+
+  // Sidebar toggle
+  hamburger.addEventListener('click', () =>
+    sidebar.classList.contains('open') ? closeSidebar() : openSidebar()
+  );
+  overlay.addEventListener('click', closeSidebar);
+
+  // New chat
+  document.getElementById('new-chat-btn').addEventListener('click', startNewChat);
+
+  // Brand name = home / new chat
+  const brandHome = document.getElementById('brand-home');
+  brandHome.addEventListener('click', startNewChat);
+  brandHome.addEventListener('keydown', e => {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); startNewChat(); }
+  });
+
+  // Input
+  inputEl.addEventListener('input', () => {
+    autoResize();
+    sendBtn.disabled = inputEl.value.trim() === '' || isLoading;
+  });
+  inputEl.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(inputEl.value); }
+  });
+  sendBtn.addEventListener('click', () => sendMessage(inputEl.value));
+  stopBtn.addEventListener('click', () => { if (controller) controller.abort(); });
+
+  // Suggestion chips
+  document.querySelectorAll('.suggestion').forEach(btn => {
+    btn.addEventListener('click', () => {
+      inputEl.value = btn.textContent.trim();
+      autoResize(); sendBtn.disabled = false; inputEl.focus();
+    });
+    btn.addEventListener('keydown', e => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); btn.click(); }
+    });
+  });
+
+  // FAQ modal
+  const faqOverlay = document.getElementById('faq-overlay');
+  const faqBtn     = document.getElementById('faq-btn');
+  const faqClose   = document.getElementById('faq-close');
+  function openFaq()  { faqOverlay.classList.add('open');    faqBtn.setAttribute('aria-expanded','true');  faqClose.focus(); }
+  function closeFaq() { faqOverlay.classList.remove('open'); faqBtn.setAttribute('aria-expanded','false'); faqBtn.focus(); }
+  faqBtn.addEventListener('click', () => faqOverlay.classList.contains('open') ? closeFaq() : openFaq());
+  faqClose.addEventListener('click', closeFaq);
+  faqOverlay.addEventListener('click', e => { if (e.target === faqOverlay) closeFaq(); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') { closeFaq(); closeSidebar(); } });
+
+  /* ══════════════════════════════════════════════════════════════
+     INIT
+  ══════════════════════════════════════════════════════════════ */
+  renderSidebar();
+  inputEl.focus();
+  setStatus('STANDBY');
+  checkBackend();
+</script>
+</body>
+</html>
